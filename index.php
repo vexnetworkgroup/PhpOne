@@ -1,202 +1,359 @@
 <?php
-// Rule34 Website - Single File PHP Application
-// Database configuration
-$db_host = 'localhost';
-$db_name = 'rule34_db';
-$db_user = 'root';
-$db_pass = '';
+// Rule34 Website - Single File PHP Application with JSON Storage
+// JSON file paths
+$posts_file = 'data/posts.json';
+$tags_file = 'data/tags.json';
+$artists_file = 'data/artists.json';
 
-// Initialize database connection
-try {
-    $pdo = new PDO("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    // Create database if it doesn't exist
-    try {
-        $pdo = new PDO("mysql:host=$db_host", $db_user, $db_pass);
-        $pdo->exec("CREATE DATABASE IF NOT EXISTS $db_name");
-        $pdo->exec("USE $db_name");
-        
-        // Create tables
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS posts (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                title VARCHAR(255) NOT NULL,
-                description TEXT,
-                image_url VARCHAR(500) NOT NULL,
-                thumbnail_url VARCHAR(500),
-                rating ENUM('safe', 'questionable', 'explicit') DEFAULT 'safe',
-                category ENUM('anime', 'hentai', 'furry', 'western', 'manga', 'doujin', 'cosplay', 'real') DEFAULT 'anime',
-                score INT DEFAULT 0,
-                views INT DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_secret BOOLEAN DEFAULT FALSE,
-                uploader VARCHAR(100) DEFAULT 'Anonymous'
-            )
-        ");
-        
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS tags (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(100) UNIQUE NOT NULL,
-                type ENUM('general', 'artist', 'character', 'copyright', 'meta', 'species', 'fetish') DEFAULT 'general',
-                post_count INT DEFAULT 0,
-                description TEXT
-            )
-        ");
-        
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS post_tags (
-                post_id INT,
-                tag_id INT,
-                PRIMARY KEY (post_id, tag_id),
-                FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
-                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-            )
-        ");
-        
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS artists (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(100) UNIQUE NOT NULL,
-                description TEXT,
-                website VARCHAR(255),
-                twitter VARCHAR(255),
-                pixiv VARCHAR(255),
-                post_count INT DEFAULT 0
-            )
-        ");
-        
-        // Insert sample data
-        insertSampleData($pdo);
-        
-    } catch(PDOException $e) {
-        die("Database error: " . $e->getMessage());
+// Create data directory if it doesn't exist
+if (!file_exists('data')) {
+    mkdir('data', 0755, true);
+}
+
+// Initialize JSON files with sample data if they don't exist
+function initializeData() {
+    global $posts_file, $tags_file, $artists_file;
+    
+    if (!file_exists($posts_file)) {
+        $sample_posts = [
+            [
+                'id' => 1,
+                'title' => 'Anime Waifu Art',
+                'description' => 'Beautiful anime character illustration',
+                'image_url' => 'https://via.placeholder.com/800x600/ff6b9d/ffffff?text=Anime+Waifu',
+                'thumbnail_url' => 'https://via.placeholder.com/300x200/ff6b9d/ffffff?text=Anime',
+                'rating' => 'questionable',
+                'category' => 'anime',
+                'tags' => ['big_breasts', 'anime', 'waifu'],
+                'score' => 15,
+                'views' => 120,
+                'created_at' => date('Y-m-d H:i:s'),
+                'is_secret' => false,
+                'uploader' => 'AnimeArt123'
+            ],
+            [
+                'id' => 2,
+                'title' => 'Hentai Collection',
+                'description' => 'Premium hentai artwork',
+                'image_url' => 'https://via.placeholder.com/800x600/ff4444/ffffff?text=Hentai',
+                'thumbnail_url' => 'https://via.placeholder.com/300x200/ff4444/ffffff?text=Hentai',
+                'rating' => 'explicit',
+                'category' => 'hentai',
+                'tags' => ['hentai', 'ahegao', 'tentacles'],
+                'score' => 25,
+                'views' => 250,
+                'created_at' => date('Y-m-d H:i:s', strtotime('-1 hour')),
+                'is_secret' => false,
+                'uploader' => 'HentaiMaster'
+            ],
+            [
+                'id' => 3,
+                'title' => 'Furry Art',
+                'description' => 'Anthropomorphic character art',
+                'image_url' => 'https://via.placeholder.com/800x600/44ff44/ffffff?text=Furry',
+                'thumbnail_url' => 'https://via.placeholder.com/300x200/44ff44/ffffff?text=Furry',
+                'rating' => 'explicit',
+                'category' => 'furry',
+                'tags' => ['furry', 'anthro', 'yiff'],
+                'score' => 18,
+                'views' => 89,
+                'created_at' => date('Y-m-d H:i:s', strtotime('-2 hours')),
+                'is_secret' => false,
+                'uploader' => 'FurryFan'
+            ],
+            [
+                'id' => 4,
+                'title' => 'VIP Premium Content',
+                'description' => 'Exclusive VIP content',
+                'image_url' => 'https://via.placeholder.com/800x600/ff9999/ffffff?text=VIP+Secret',
+                'thumbnail_url' => 'https://via.placeholder.com/300x200/ff9999/ffffff?text=VIP',
+                'rating' => 'explicit',
+                'category' => 'hentai',
+                'tags' => ['vip', 'premium', 'exclusive'],
+                'score' => 35,
+                'views' => 45,
+                'created_at' => date('Y-m-d H:i:s', strtotime('-3 hours')),
+                'is_secret' => true,
+                'uploader' => 'VIPUploader'
+            ]
+        ];
+        file_put_contents($posts_file, json_encode($sample_posts, JSON_PRETTY_PRINT));
+    }
+    
+    if (!file_exists($tags_file)) {
+        $sample_tags = [
+            ['name' => 'big_breasts', 'type' => 'general', 'description' => 'Large chest size', 'post_count' => 15],
+            ['name' => 'ahegao', 'type' => 'general', 'description' => 'Facial expression', 'post_count' => 8],
+            ['name' => 'tentacles', 'type' => 'general', 'description' => 'Tentacle content', 'post_count' => 12],
+            ['name' => 'futanari', 'type' => 'general', 'description' => 'Hermaphrodite characters', 'post_count' => 6],
+            ['name' => 'yuri', 'type' => 'general', 'description' => 'Girl on girl', 'post_count' => 9],
+            ['name' => 'yaoi', 'type' => 'general', 'description' => 'Boy on boy', 'post_count' => 4],
+            ['name' => 'loli', 'type' => 'general', 'description' => 'Young-looking characters', 'post_count' => 7],
+            ['name' => 'milf', 'type' => 'general', 'description' => 'Mature women', 'post_count' => 11],
+            ['name' => 'monster_girl', 'type' => 'species', 'description' => 'Monster girl characters', 'post_count' => 5],
+            ['name' => 'catgirl', 'type' => 'species', 'description' => 'Cat-like characters', 'post_count' => 13],
+            ['name' => 'bondage', 'type' => 'fetish', 'description' => 'Restraint content', 'post_count' => 8],
+            ['name' => 'bdsm', 'type' => 'fetish', 'description' => 'BDSM content', 'post_count' => 6],
+            ['name' => 'shadman', 'type' => 'artist', 'description' => 'Popular R34 artist', 'post_count' => 3],
+            ['name' => 'sakimichan', 'type' => 'artist', 'description' => 'Popular anime artist', 'post_count' => 4],
+            ['name' => 'naruto', 'type' => 'copyright', 'description' => 'Naruto series', 'post_count' => 8],
+            ['name' => 'pokemon', 'type' => 'copyright', 'description' => 'Pokemon series', 'post_count' => 12],
+            ['name' => 'overwatch', 'type' => 'copyright', 'description' => 'Overwatch game', 'post_count' => 15]
+        ];
+        file_put_contents($tags_file, json_encode($sample_tags, JSON_PRETTY_PRINT));
+    }
+    
+    if (!file_exists($artists_file)) {
+        $sample_artists = [
+            [
+                'name' => 'Shadman',
+                'description' => 'Popular R34 artist known for controversial content',
+                'website' => 'https://shadbase.com',
+                'twitter' => '@shadman',
+                'pixiv' => '',
+                'post_count' => 15
+            ],
+            [
+                'name' => 'Sakimichan',
+                'description' => 'Anime and game character artist',
+                'website' => 'https://sakimichan.deviantart.com',
+                'twitter' => '@sakimichanart',
+                'pixiv' => 'sakimichan',
+                'post_count' => 12
+            ],
+            [
+                'name' => 'Incase',
+                'description' => 'Western and anime style R34 artist',
+                'website' => 'https://incaseart.com',
+                'twitter' => '@InCaseArt',
+                'pixiv' => '',
+                'post_count' => 8
+            ],
+            [
+                'name' => 'Zone-tan',
+                'description' => 'Flash animation and R34 artist',
+                'website' => 'https://zone-archive.com',
+                'twitter' => '@z0ne',
+                'pixiv' => '',
+                'post_count' => 6
+            ]
+        ];
+        file_put_contents($artists_file, json_encode($sample_artists, JSON_PRETTY_PRINT));
     }
 }
 
-function insertSampleData($pdo) {
-    // Sample R18 posts
-    $posts = [
-        ['Anime Waifu Art', 'Beautiful anime character illustration', 'https://via.placeholder.com/800x600/ff6b9d/ffffff?text=Anime+Waifu', 'https://via.placeholder.com/300x200/ff6b9d/ffffff?text=Anime', 'questionable', 'anime', 0],
-        ['Hentai Collection', 'Premium hentai artwork', 'https://via.placeholder.com/800x600/ff4444/ffffff?text=Hentai', 'https://via.placeholder.com/300x200/ff4444/ffffff?text=Hentai', 'explicit', 'hentai', 1],
-        ['Furry Art', 'Anthropomorphic character art', 'https://via.placeholder.com/800x600/44ff44/ffffff?text=Furry', 'https://via.placeholder.com/300x200/44ff44/ffffff?text=Furry', 'explicit', 'furry', 0],
-        ['Western Style', 'Western cartoon R34', 'https://via.placeholder.com/800x600/4444ff/ffffff?text=Western', 'https://via.placeholder.com/300x200/4444ff/ffffff?text=Western', 'explicit', 'western', 0],
-        ['Secret Premium', 'VIP exclusive content', 'https://via.placeholder.com/800x600/ff9999/ffffff?text=Secret', 'https://via.placeholder.com/300x200/ff9999/ffffff?text=Secret', 'explicit', 'hentai', 1]
-    ];
-    
-    foreach ($posts as $post) {
-        $stmt = $pdo->prepare("INSERT IGNORE INTO posts (title, description, image_url, thumbnail_url, rating, category, is_secret) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute($post);
+// Helper functions for JSON operations
+function loadJSON($file) {
+    if (file_exists($file)) {
+        $content = file_get_contents($file);
+        return json_decode($content, true) ?: [];
     }
-    
-    // Sample R18 tags
-    $tags = [
-        ['big_breasts', 'general', 'Large chest size'],
-        ['ahegao', 'general', 'Facial expression'],
-        ['tentacles', 'general', 'Tentacle content'],
-        ['futanari', 'general', 'Hermaphrodite characters'],
-        ['yuri', 'general', 'Girl on girl'],
-        ['yaoi', 'general', 'Boy on boy'],
-        ['loli', 'general', 'Young-looking characters'],
-        ['milf', 'general', 'Mature women'],
-        ['monster_girl', 'species', 'Monster girl characters'],
-        ['catgirl', 'species', 'Cat-like characters'],
-        ['bondage', 'fetish', 'Restraint content'],
-        ['bdsm', 'fetish', 'BDSM content'],
-        ['artist_shadman', 'artist', 'Popular R34 artist'],
-        ['artist_sakimichan', 'artist', 'Popular anime artist'],
-        ['naruto', 'copyright', 'Naruto series'],
-        ['pokemon', 'copyright', 'Pokemon series'],
-        ['overwatch', 'copyright', 'Overwatch game']
-    ];
-    
-    foreach ($tags as $tag) {
-        $stmt = $pdo->prepare("INSERT IGNORE INTO tags (name, type, description) VALUES (?, ?, ?)");
-        $stmt->execute($tag);
-    }
-    
-    // Sample artists
-    $artists = [
-        ['Shadman', 'Popular R34 artist', 'https://shadbase.com', '@shadman', ''],
-        ['Sakimichan', 'Anime and game character artist', 'https://sakimichan.deviantart.com', '@sakimichanart', 'sakimichan'],
-        ['Incase', 'Western and anime style artist', 'https://incaseart.com', '@InCaseArt', ''],
-        ['Zone-tan', 'Flash animation artist', 'https://zone-archive.com', '@z0ne', '']
-    ];
-    
-    foreach ($artists as $artist) {
-        $stmt = $pdo->prepare("INSERT IGNORE INTO artists (name, description, website, twitter, pixiv) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute($artist);
-    }
+    return [];
 }
 
-// Helper functions
-function getPosts($pdo, $limit = 20, $offset = 0, $search = '', $tags = [], $rating = '', $category = '', $include_secret = false) {
-    $sql = "SELECT p.*, GROUP_CONCAT(t.name) as tags FROM posts p 
-            LEFT JOIN post_tags pt ON p.id = pt.post_id 
-            LEFT JOIN tags t ON pt.tag_id = t.id 
-            WHERE 1=1";
-    $params = [];
-    
-    if (!$include_secret) {
-        $sql .= " AND p.is_secret = 0";
-    }
-    
-    if ($search) {
-        $sql .= " AND (p.title LIKE ? OR p.description LIKE ?)";
-        $params[] = "%$search%";
-        $params[] = "%$search%";
-    }
-    
-    if ($rating) {
-        $sql .= " AND p.rating = ?";
-        $params[] = $rating;
-    }
-    
-    if ($category) {
-        $sql .= " AND p.category = ?";
-        $params[] = $category;
-    }
-    
-    if (!empty($tags)) {
-        $placeholders = str_repeat('?,', count($tags) - 1) . '?';
-        $sql .= " AND p.id IN (
-            SELECT pt.post_id FROM post_tags pt 
-            JOIN tags t ON pt.tag_id = t.id 
-            WHERE t.name IN ($placeholders)
-        )";
-        $params = array_merge($params, $tags);
-    }
-    
-    $sql .= " GROUP BY p.id ORDER BY p.created_at DESC LIMIT ? OFFSET ?";
-    $params[] = $limit;
-    $params[] = $offset;
-    
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+function saveJSON($file, $data) {
+    return file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT));
 }
 
-function getTags($pdo, $type = '') {
-    $sql = "SELECT * FROM tags";
-    $params = [];
+function getNextId($data) {
+    if (empty($data)) return 1;
+    $ids = array_column($data, 'id');
+    return max($ids) + 1;
+}
+
+function getPosts($limit = 20, $offset = 0, $search = '', $tags = [], $rating = '', $category = '', $include_secret = false) {
+    global $posts_file;
+    $posts = loadJSON($posts_file);
+    
+    // Filter posts
+    $filtered = array_filter($posts, function($post) use ($search, $tags, $rating, $category, $include_secret) {
+        // Secret filter
+        if (!$include_secret && $post['is_secret']) {
+            return false;
+        }
+        
+        // Search filter
+        if ($search && stripos($post['title'], $search) === false && stripos($post['description'], $search) === false) {
+            return false;
+        }
+        
+        // Rating filter
+        if ($rating && $post['rating'] !== $rating) {
+            return false;
+        }
+        
+        // Category filter
+        if ($category && $post['category'] !== $category) {
+            return false;
+        }
+        
+        // Tags filter
+        if (!empty($tags)) {
+            $postTags = $post['tags'] ?? [];
+            foreach ($tags as $tag) {
+                if (!in_array($tag, $postTags)) {
+                    return false;
+                }
+            }
+        }
+        
+        return true;
+    });
+    
+    // Sort by created_at desc
+    usort($filtered, function($a, $b) {
+        return strtotime($b['created_at']) - strtotime($a['created_at']);
+    });
+    
+    // Apply pagination
+    return array_slice($filtered, $offset, $limit);
+}
+
+function getTags($type = '') {
+    global $tags_file;
+    $tags = loadJSON($tags_file);
     
     if ($type) {
-        $sql .= " WHERE type = ?";
-        $params[] = $type;
+        $tags = array_filter($tags, function($tag) use ($type) {
+            return $tag['type'] === $type;
+        });
     }
     
-    $sql .= " ORDER BY post_count DESC, name ASC";
+    // Sort by post_count desc, then name asc
+    usort($tags, function($a, $b) {
+        if ($a['post_count'] === $b['post_count']) {
+            return strcmp($a['name'], $b['name']);
+        }
+        return $b['post_count'] - $a['post_count'];
+    });
     
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return $tags;
 }
 
-function getArtists($pdo) {
-    $stmt = $pdo->query("SELECT * FROM artists ORDER BY post_count DESC, name ASC");
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+function getArtists() {
+    global $artists_file;
+    $artists = loadJSON($artists_file);
+    
+    // Sort by post_count desc, then name asc
+    usort($artists, function($a, $b) {
+        if ($a['post_count'] === $b['post_count']) {
+            return strcmp($a['name'], $b['name']);
+        }
+        return $b['post_count'] - $a['post_count'];
+    });
+    
+    return $artists;
 }
+
+function addPost($data) {
+    global $posts_file;
+    $posts = loadJSON($posts_file);
+    
+    $post = [
+        'id' => getNextId($posts),
+        'title' => $data['title'],
+        'description' => $data['description'] ?? '',
+        'image_url' => $data['image_url'],
+        'thumbnail_url' => $data['thumbnail_url'] ?? $data['image_url'],
+        'rating' => $data['rating'],
+        'category' => $data['category'],
+        'tags' => isset($data['tags']) ? array_map('trim', explode(',', $data['tags'])) : [],
+        'score' => 0,
+        'views' => 0,
+        'created_at' => date('Y-m-d H:i:s'),
+        'is_secret' => isset($data['is_secret']),
+        'uploader' => $data['uploader'] ?? 'Anonymous'
+    ];
+    
+    $posts[] = $post;
+    saveJSON($posts_file, $posts);
+    
+    // Update tag counts
+    updateTagCounts($post['tags']);
+    
+    return $post['id'];
+}
+
+function addTag($name, $type, $description = '') {
+    global $tags_file;
+    $tags = loadJSON($tags_file);
+    
+    // Check if tag already exists
+    foreach ($tags as $tag) {
+        if ($tag['name'] === $name) {
+            return false;
+        }
+    }
+    
+    $tags[] = [
+        'name' => $name,
+        'type' => $type,
+        'description' => $description,
+        'post_count' => 0
+    ];
+    
+    return saveJSON($tags_file, $tags);
+}
+
+function addArtist($data) {
+    global $artists_file;
+    $artists = loadJSON($artists_file);
+    
+    $artists[] = [
+        'name' => $data['name'],
+        'description' => $data['description'] ?? '',
+        'website' => $data['website'] ?? '',
+        'twitter' => $data['twitter'] ?? '',
+        'pixiv' => $data['pixiv'] ?? '',
+        'post_count' => 0
+    ];
+    
+    return saveJSON($artists_file, $artists);
+}
+
+function updateTagCounts($postTags) {
+    global $tags_file;
+    $tags = loadJSON($tags_file);
+    
+    // Create new tags if they don't exist
+    foreach ($postTags as $tagName) {
+        $found = false;
+        foreach ($tags as &$tag) {
+            if ($tag['name'] === $tagName) {
+                $tag['post_count']++;
+                $found = true;
+                break;
+            }
+        }
+        if (!$found) {
+            $tags[] = [
+                'name' => $tagName,
+                'type' => 'general',
+                'description' => '',
+                'post_count' => 1
+            ];
+        }
+    }
+    
+    saveJSON($tags_file, $tags);
+}
+
+function incrementViews($postId) {
+    global $posts_file;
+    $posts = loadJSON($posts_file);
+    
+    foreach ($posts as &$post) {
+        if ($post['id'] == $postId) {
+            $post['views']++;
+            break;
+        }
+    }
+    
+    saveJSON($posts_file, $posts);
+}
+
+// Initialize data
+initializeData();
 
 // API endpoints
 if (isset($_GET['api'])) {
@@ -217,31 +374,38 @@ if (isset($_GET['api'])) {
             $category = $_GET['category'] ?? '';
             $include_secret = isset($_GET['secret']) && $_GET['secret'] === '1';
             
-            $posts = getPosts($pdo, $limit, $offset, $search, $tags, $rating, $category, $include_secret);
+            $posts = getPosts($limit, $offset, $search, $tags, $rating, $category, $include_secret);
             echo json_encode(['posts' => $posts, 'count' => count($posts)]);
             exit;
             
         case 'tags':
             $type = $_GET['type'] ?? '';
-            $tags = getTags($pdo, $type);
+            $tags = getTags($type);
             echo json_encode(['tags' => $tags]);
             exit;
             
         case 'artists':
-            $artists = getArtists($pdo);
+            $artists = getArtists();
             echo json_encode(['artists' => $artists]);
             exit;
             
         case 'post':
             if (isset($_GET['id'])) {
-                $stmt = $pdo->prepare("SELECT * FROM posts WHERE id = ?");
-                $stmt->execute([$_GET['id']]);
-                $post = $stmt->fetch(PDO::FETCH_ASSOC);
+                $posts = loadJSON($posts_file);
+                $post = null;
+                foreach ($posts as $p) {
+                    if ($p['id'] == $_GET['id']) {
+                        $post = $p;
+                        break;
+                    }
+                }
                 
-                // Increment view count
-                $pdo->prepare("UPDATE posts SET views = views + 1 WHERE id = ?")->execute([$_GET['id']]);
-                
-                echo json_encode(['post' => $post]);
+                if ($post) {
+                    incrementViews($_GET['id']);
+                    echo json_encode(['post' => $post]);
+                } else {
+                    echo json_encode(['error' => 'Post not found']);
+                }
             }
             exit;
             
@@ -256,56 +420,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
             case 'add_post':
-                $stmt = $pdo->prepare("INSERT INTO posts (title, description, image_url, thumbnail_url, rating, category, is_secret, uploader) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([
-                    $_POST['title'],
-                    $_POST['description'],
-                    $_POST['image_url'],
-                    $_POST['thumbnail_url'] ?? $_POST['image_url'],
-                    $_POST['rating'],
-                    $_POST['category'],
-                    isset($_POST['is_secret']) ? 1 : 0,
-                    $_POST['uploader'] ?? 'Anonymous'
-                ]);
-                
-                $post_id = $pdo->lastInsertId();
-                
-                // Add tags if provided
-                if (!empty($_POST['tags'])) {
-                    $tag_names = array_map('trim', explode(',', $_POST['tags']));
-                    foreach ($tag_names as $tag_name) {
-                        if (!empty($tag_name)) {
-                            // Insert tag if doesn't exist
-                            $stmt = $pdo->prepare("INSERT IGNORE INTO tags (name, type) VALUES (?, 'general')");
-                            $stmt->execute([$tag_name]);
-                            
-                            // Get tag ID
-                            $stmt = $pdo->prepare("SELECT id FROM tags WHERE name = ?");
-                            $stmt->execute([$tag_name]);
-                            $tag_id = $stmt->fetchColumn();
-                            
-                            // Link post to tag
-                            $stmt = $pdo->prepare("INSERT IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)");
-                            $stmt->execute([$post_id, $tag_id]);
-                        }
-                    }
-                }
+                addPost($_POST);
                 break;
                 
             case 'add_tag':
-                $stmt = $pdo->prepare("INSERT IGNORE INTO tags (name, type, description) VALUES (?, ?, ?)");
-                $stmt->execute([$_POST['tag_name'], $_POST['tag_type'], $_POST['tag_description'] ?? '']);
+                addTag($_POST['tag_name'], $_POST['tag_type'], $_POST['tag_description'] ?? '');
                 break;
                 
             case 'add_artist':
-                $stmt = $pdo->prepare("INSERT INTO artists (name, description, website, twitter, pixiv) VALUES (?, ?, ?, ?, ?)");
-                $stmt->execute([
-                    $_POST['artist_name'], 
-                    $_POST['description'], 
-                    $_POST['website'],
-                    $_POST['twitter'] ?? '',
-                    $_POST['pixiv'] ?? ''
-                ]);
+                addArtist($_POST);
                 break;
         }
         header('Location: ' . $_SERVER['PHP_SELF'] . '?' . $_SERVER['QUERY_STRING']);
@@ -321,9 +444,9 @@ $rating_filter = $_GET['rating'] ?? '';
 $category_filter = $_GET['category'] ?? '';
 $show_secret = isset($_GET['secret']);
 
-$posts = getPosts($pdo, 20, 0, $search, $tag_filter ? [$tag_filter] : [], $rating_filter, $category_filter, $show_secret);
-$tags = getTags($pdo);
-$artists = getArtists($pdo);
+$posts = getPosts(20, 0, $search, $tag_filter ? [$tag_filter] : [], $rating_filter, $category_filter, $show_secret);
+$tags = getTags();
+$artists = getArtists();
 ?>
 
 <!DOCTYPE html>
@@ -726,6 +849,14 @@ $artists = getArtists($pdo);
             cursor: pointer;
         }
         
+        .stats-info {
+            background: rgba(0, 0, 0, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
         @media (max-width: 768px) {
             .header-content {
                 flex-direction: column;
@@ -772,6 +903,10 @@ $artists = getArtists($pdo);
         </header>
 
         <?php if ($page === 'home'): ?>
+            <div class="stats-info">
+                📊 Total Posts: <?= count(loadJSON($posts_file)) ?> | 🏷️ Tags: <?= count($tags) ?> | 👨‍🎨 Artists: <?= count($artists) ?> | 💾 Storage: JSON Files
+            </div>
+            
             <div class="search-section">
                 <form class="search-form" method="GET">
                     <input type="text" name="search" class="search-input" placeholder="Search R34 content..." value="<?= htmlspecialchars($search) ?>">
@@ -812,6 +947,11 @@ $artists = getArtists($pdo);
                         <div class="post-content">
                             <h3 class="post-title"><?= htmlspecialchars($post['title']) ?></h3>
                             <p class="post-description"><?= htmlspecialchars($post['description']) ?></p>
+                            <div style="margin: 10px 0;">
+                                <?php foreach ($post['tags'] as $tag): ?>
+                                    <span style="background: #e0e0e0; padding: 2px 6px; border-radius: 10px; font-size: 0.8em; margin-right: 5px;"><?= htmlspecialchars($tag) ?></span>
+                                <?php endforeach; ?>
+                            </div>
                             <div class="post-meta">
                                 <div>
                                     <span class="rating-badge rating-<?= $post['rating'] ?>"><?= $post['rating'] ?></span>
@@ -820,7 +960,7 @@ $artists = getArtists($pdo);
                                         <span class="secret-badge">VIP</span>
                                     <?php endif; ?>
                                 </div>
-                                <small>👁️ <?= $post['views'] ?> | ⭐ <?= $post['score'] ?></small>
+                                <small>👁️ <?= $post['views'] ?> | ⭐ <?= $post['score'] ?> | 👤 <?= htmlspecialchars($post['uploader']) ?></small>
                             </div>
                         </div>
                     </div>
@@ -830,7 +970,7 @@ $artists = getArtists($pdo);
         <?php elseif ($page === 'upload'): ?>
             <div class="upload-section">
                 <h2>📤 Upload R18 Content</h2>
-                <p style="color: #666; margin-bottom: 20px;">Share your favorite R34 content with the community. All content must comply with site rules.</p>
+                <p style="color: #666; margin-bottom: 20px;">Share your favorite R34 content with the community. All data stored in JSON files.</p>
                 
                 <form method="POST" class="upload-form">
                     <input type="hidden" name="action" value="add_post">
@@ -961,7 +1101,11 @@ $artists = getArtists($pdo);
         <?php elseif ($page === 'admin'): ?>
             <div class="admin-panel">
                 <h3>⚙️ Admin Panel</h3>
-                <p style="color: #666; margin-bottom: 20px;">Administrative functions for site management.</p>
+                <p style="color: #666; margin-bottom: 20px;">Administrative functions for site management. All data stored in JSON files.</p>
+                
+                <div class="stats-info">
+                    📁 Data Files: posts.json (<?= count(loadJSON($posts_file)) ?> posts) | tags.json (<?= count($tags) ?> tags) | artists.json (<?= count($artists) ?> artists)
+                </div>
             </div>
 
             <div class="admin-panel">
@@ -998,7 +1142,7 @@ $artists = getArtists($pdo);
                     <input type="hidden" name="action" value="add_artist">
                     <div class="form-group">
                         <label>Artist Name:</label>
-                        <input type="text" name="artist_name" required>
+                        <input type="text" name="name" required>
                     </div>
                     <div class="form-group">
                         <label>Description:</label>
@@ -1025,7 +1169,7 @@ $artists = getArtists($pdo);
         <?php elseif ($page === 'api'): ?>
             <div class="api-section">
                 <h3>🔌 API Documentation</h3>
-                <p>All API endpoints support CORS and return JSON data. Perfect for building R34 apps!</p>
+                <p>All API endpoints support CORS and return JSON data. Perfect for building R34 apps! Data stored in JSON files.</p>
                 
                 <h4>Available Endpoints:</h4>
                 
