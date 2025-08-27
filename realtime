@@ -1,0 +1,129 @@
+--===== Services =====--
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+--===== Config =====--
+-- Chọn mode kết nối (WS hoặc REST fallback)
+local USE_WS = false 
+local SERVER = "http://node69.lunes.host:3139"
+
+local HttpService = game:GetService("HttpService")
+local http_request = syn and syn.request or http_request
+
+-- WebSocket (nếu có)
+local ws
+if USE_WS and (syn and syn.websocket) then
+    ws = syn.websocket.connect("ws://node69.lunes.host:3139")
+end
+
+--===== Functions =====--
+
+-- Gửi update skin
+local function sendUpdate(color3)
+    local rgb = {R = color3.R, G = color3.G, B = color3.B}
+
+    if ws then
+        -- Gửi qua WebSocket
+        ws:Send(HttpService:JSONEncode({
+            event = "update",
+            payload = { player = LocalPlayer.Name, data = { skin = rgb } }
+        }))
+    else
+        -- Gửi qua REST
+        local success, err = pcall(function()
+            http_request({
+                Url = SERVER.."/update",
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = HttpService:JSONEncode({
+                    player = LocalPlayer.Name,
+                    skin = rgb
+                })
+            })
+        end)
+        if not success then warn("⚠️ Gửi update thất bại:", err) end
+    end
+end
+
+-- Thay đổi màu da nhân vật
+local function setSkin(color3)
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local bc = char:FindFirstChildOfClass("BodyColors")
+    if bc then
+        bc.HeadColor3 = color3
+        bc.TorsoColor3 = color3
+        bc.LeftArmColor3 = color3
+        bc.RightArmColor3 = color3
+        bc.LeftLegColor3 = color3
+        bc.RightLegColor3 = color3
+        sendUpdate(color3)
+    end
+end
+
+--===== UI =====--
+
+-- ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SkinChangerUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = game.CoreGui
+
+-- Main Frame
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 240, 0, 160)
+frame.Position = UDim2.new(0.3, 0, 0.3, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true  -- Roblox support mobile drag
+frame.Parent = screenGui
+
+-- Title
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1,0,0,30)
+title.BackgroundColor3 = Color3.fromRGB(45,45,45)
+title.Text = "Skin Changer"
+title.TextColor3 = Color3.fromRGB(0,255,255)
+title.TextScaled = true
+title.Parent = frame
+
+-- Grid cho nút màu
+local grid = Instance.new("Frame")
+grid.Size = UDim2.new(1, -10, 1, -40)
+grid.Position = UDim2.new(0,5,0,35)
+grid.BackgroundTransparency = 1
+grid.Parent = frame
+
+local uiGrid = Instance.new("UIGridLayout")
+uiGrid.CellSize = UDim2.new(0,70,0,40)
+uiGrid.CellPadding = UDim2.new(0,5,0,5)
+uiGrid.FillDirectionMaxCells = 3
+uiGrid.SortOrder = Enum.SortOrder.LayoutOrder
+uiGrid.Parent = grid
+
+-- Danh sách màu
+local colors = {
+    {Color3.fromRGB(255,224,189), "Light"},
+    {Color3.fromRGB(205,133,63), "Medium"},
+    {Color3.fromRGB(139,69,19), "Dark"},
+    {Color3.fromRGB(255,0,0), "Red"},
+    {Color3.fromRGB(0,255,0), "Green"},
+    {Color3.fromRGB(0,0,255), "Blue"},
+    {Color3.fromRGB(255,255,0), "Yellow"},
+    {Color3.fromRGB(255,0,255), "Magenta"},
+    {Color3.fromRGB(0,255,255), "Cyan"},
+}
+
+-- Tạo button màu
+for _, info in ipairs(colors) do
+    local c, name = info[1], info[2]
+    local btn = Instance.new("TextButton")
+    btn.BackgroundColor3 = c
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.TextScaled = true
+    btn.Parent = grid
+    btn.MouseButton1Click:Connect(function()
+        setSkin(c)
+    end)
+end
